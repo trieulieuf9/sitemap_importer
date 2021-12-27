@@ -20,10 +20,10 @@ Note: After step 3, you see a message `no sitemap xml file found in {path}`. Tha
 # example usage
 
 - Export sitemap file
-{screenshot 1}
+![screenshot 1](screenshots/screenshot_1.png?raw=true)
 
 - Put this file into `sitemap_source` folder
-{screenshot 2}
+![screenshot 2](screenshots/screenshot_2.png?raw=true)
 
 - Reload `Sitemap Importer` to trigger import action
-{screenshot 3}
+![screenshot 3](screenshots/screenshot_3.png?raw=true)
