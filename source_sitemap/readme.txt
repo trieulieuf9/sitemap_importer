@@ -1,0 +1,2 @@
+- Any sitemap exported file end with .xml will be picked up and parsed here
+- Put your wife in here and she will be parsed as well
