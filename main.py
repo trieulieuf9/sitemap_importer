@@ -18,15 +18,17 @@ class BurpExtender(IBurpExtender):
 		if not self.ensureSiteMapFolder(sitemap_folder_path):
 			return
 
-		parser = XMLParser()
+		
 		for file in os.listdir(sitemap_folder_path):
 			if file.endswith(".xml"):
 				file_path = os.path.join(sitemap_folder_path, file)
-				print("Begin parsing {}".format(file))
-				parser.parse(file_path)
+
+				parser = XMLParser(file_path)
+				parser.parse()
+				parser.printSummary()
+
 				for item in parser.getItems():
 					self.addToSiteMap(item[0], item[1], item[2])
-				print("Finish parsing: {}, {} items added".format(file, len(parser.getItems())))
 
 		print("done")
 		return
@@ -64,44 +66,59 @@ class XMLParser():
 	If you really want comment in your sitemap. Raise an issue.
 	"""
 
-	def __init__(self):
+	def __init__(self, file_path, verbose=True):
 		self.items = []
+		self.skip_items = []
+		self.response_len_limit = 2000000
+		self.verbose = verbose
+		self.file_path = file_path
+		self.file_name = file_path.split("/")[-1]
 
 	def getItems(self):
-		self.cleanUpItems()
 		return self.items
 
-	def cleanUpItems(self):
-		"""
-		Value inside item are wrapped with <![CDATA[ ... ]], this function remove it
-		"""
-		for item in self.items:
-			for i, value in enumerate(item):
-				item[i] = value.lstrip("<![CDATA[").rstrip("]]>")
+	def getSkipItems(self):
+		return self.skip_items
 
-	def parse(self, file_path):
-		self.items = []
+	def printSummary(self):
+		print("------------")
+		print("- Summary: {}".format(self.file_name))
+		print("+ {} items successfully parsed".format(len(self.items)))
 
-		def _get_char(string, index):
+		if len(self.skip_items) > 0:
+			print("+ {} items skipped due to response size > {} bytes".format(len(self.skip_items), self.response_len_limit))
+			for item in self.skip_items:
+				print("+++ skipped item: {}, reponse size: {}".format(item[0], item[1]))
+
+	def _print(self, message, params):
+		if self.verbose:
+			print(message.format(*params))
+
+	def _get_char(self, string, index):
 			if len(string) > index:
 				return string[index]
 			else:
 				return ""
 
-		with open(file_path) as file:
+	def parse(self):
+		self._print("Begin parsing {}", [self.file_name])
+
+		with open(self.file_path) as file:
 			xml_content = file.read()
 
 		# Don't jugde, I only spend 90 minutes on this
+		# 150 minutes now
 		is_tag = False
 		tag_name = ""
 		tag_content = ""
 		start_tag = False
 		end_tag = False
+		skip = False  # true when response is too big
 		item = [None] * 3
+		item_count = 0
 		for i, char in enumerate(xml_content):
-			next_char = _get_char(xml_content, i+1)
-			next_next_char = _get_char(xml_content, i+2)
-			if char == "<" and next_char != "!":
+
+			if char == "<" and self._get_char(xml_content, i+1) != "!":
 				is_tag = True
 				tag_name = ""
 				start_tag = False
@@ -110,31 +127,48 @@ class XMLParser():
 			if is_tag:
 				tag_name += char
 
-			if start_tag:
+			if start_tag and not skip:
 				tag_content += char
 
-			if (char == ">" and next_char != "<") or (char == ">" and next_char == "<" and next_next_char == "!"):
-				is_tag = False
-				if tag_name.startswith("</"):
-					end_tag = True
-				else:
-					start_tag = True
-					tag_content = ""
+			# if (char == ">" and next_char != "<") or (char == ">" and next_char == "<" and next_next_char == "!"):
+			if char == ">":
+				next_char = self._get_char(xml_content, i+1)
+				next_next_char = self._get_char(xml_content, i+2)
+				if next_char != "<" or (next_char == "<" and next_next_char == "!"):
+					is_tag = False
+					if tag_name.startswith("</"):
+						end_tag = True
+					else:
+						start_tag = True
+						tag_content = ""
 
 			if end_tag:
-				# IMPROVE: add support for highlight and comment.
+				value = tag_content.lstrip("<![CDATA[").rstrip("]]>")
+
 				if tag_name == "</url>":
-					item[0] = tag_content
+					item[0] = value
+					item_count += 1
+					self._print("- {}. url: {}", [item_count, value])
 				elif tag_name == "</request>":
-					item[1] = tag_content
+					item[1] = value
+					self._print("+ request: {}", [len(value)])
 				elif tag_name == "</response>":
-					item[2] = tag_content
+					item[2] = value
+					self._print("+ response: {}", [len(value)])
+				elif tag_name == "</responselength>":
+					if int(value) > self.response_len_limit:
+						# skip this item if response size > 2MB
+						skip = True
+						self.skip_items.append((item[0],int(value)))
+						self._print("+ Skip this item because response size is too large: {} bytes", (value))
 				elif tag_name == "</item>":
-					self.items.append(item)
+					if not skip:
+						self.items.append(item)
 					item = [None] * 3
-					print(len(self.items))
+					skip = False
 
 				end_tag = False
+		self._print("Finish parsing: {}", [self.file_name])
 
 
 class HttpService(IHttpService):
