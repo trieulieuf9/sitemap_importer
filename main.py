@@ -108,9 +108,10 @@ class XMLParser():
 
 		# Don't jugde, I only spend 90 minutes on this
 		# 150 minutes now
+		# 170 minutes now
 		is_tag = False
 		tag_name = ""
-		tag_content = ""
+		tag_content = []
 		start_tag = False
 		end_tag = False
 		skip = False  # true when response is too big
@@ -128,7 +129,7 @@ class XMLParser():
 				tag_name += char
 
 			if start_tag and not skip:
-				tag_content += char
+				tag_content.append(char)
 
 			# if (char == ">" and next_char != "<") or (char == ">" and next_char == "<" and next_next_char == "!"):
 			if char == ">":
@@ -140,10 +141,10 @@ class XMLParser():
 						end_tag = True
 					else:
 						start_tag = True
-						tag_content = ""
+						tag_content = []
 
 			if end_tag:
-				value = tag_content.lstrip("<![CDATA[").rstrip("]]>")
+				value = "".join(tag_content).lstrip("<![CDATA[").rstrip("]]>")
 
 				if tag_name == "</url>":
 					item[0] = value
