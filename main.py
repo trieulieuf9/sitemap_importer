@@ -19,16 +19,22 @@ class BurpExtender(IBurpExtender):
 			return
 
 		
+		summaries = []
 		for file in os.listdir(sitemap_folder_path):
 			if file.endswith(".xml"):
 				file_path = os.path.join(sitemap_folder_path, file)
 
 				parser = XMLParser(file_path)
 				parser.parse()
-				parser.printSummary()
+				summaries.append(parser.getSummary())
 
 				for item in parser.getItems():
 					self.addToSiteMap(item[0], item[1], item[2])
+
+		print("\n---------- Summary ----------")
+		for summary in summaries:
+			self.printSummary(summary)
+
 
 		print("done")
 		return
@@ -57,6 +63,17 @@ class BurpExtender(IBurpExtender):
 		return True
 
 
+	def printSummary(self, summary):
+		print("- File: {}".format(summary["file_name"]))
+		print("+ {} items successfully parsed".format(summary["item_count"]))
+
+		if summary["skip_item_count"] > 0:
+			print("+ {} items skipped due to response size > {} bytes".format(summary["skip_item_count"], summary["response_len_limit"]))
+			for item in summary["skip_items"]:
+				print("+++ skipped item: {}, reponse size: {}".format(item[0], item[1]))
+		print("")
+
+
 class XMLParser():
 	"""
 	Shitty XMLparser that only looking for certain tags. After go through a XML file. It returns an list of list containing the following data
@@ -80,15 +97,14 @@ class XMLParser():
 	def getSkipItems(self):
 		return self.skip_items
 
-	def printSummary(self):
-		print("------------")
-		print("- Summary: {}".format(self.file_name))
-		print("+ {} items successfully parsed".format(len(self.items)))
-
-		if len(self.skip_items) > 0:
-			print("+ {} items skipped due to response size > {} bytes".format(len(self.skip_items), self.response_len_limit))
-			for item in self.skip_items:
-				print("+++ skipped item: {}, reponse size: {}".format(item[0], item[1]))
+	def getSummary(self):
+		summary_dict = {}
+		summary_dict["file_name"] = self.file_name
+		summary_dict["item_count"] = len(self.items)
+		summary_dict["skip_item_count"] = len(self.skip_items)
+		summary_dict["skip_items"] = self.skip_items
+		summary_dict["response_len_limit"] = self.response_len_limit
+		return summary_dict
 
 	def _print(self, message, params):
 		if self.verbose:
